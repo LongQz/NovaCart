@@ -1,0 +1,39 @@
+server:
+  port: 8092
+
+spring:
+  application:
+    name: novacart-admin
+  datasource:
+    url: ${NOVACART_MYSQL_URL:jdbc:mysql://127.0.0.1:3306/novacart?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${NOVACART_MYSQL_USER:root}
+    password: ${NOVACART_MYSQL_PASSWORD:123456}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${NOVACART_REDIS_HOST:127.0.0.1}
+      port: ${NOVACART_REDIS_PORT:6379}
+  cloud:
+    nacos:
+      discovery:
+        enabled: ${NOVACART_NACOS_ENABLED:false}
+        server-addr: ${NOVACART_NACOS_ADDR:127.0.0.1:8848}
+    sentinel:
+      eager: false
+      transport:
+        dashboard: ${NOVACART_SENTINEL_DASHBOARD:127.0.0.1:8858}
+
+novacart:
+  delivery:
+    url: ${NOVACART_DELIVERY_URL:http://127.0.0.1:8091}
+
+seata:
+  enabled: ${NOVACART_SEATA_ENABLED:false}
+  application-id: novacart-admin
+  tx-service-group: novacart-tx-group
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics

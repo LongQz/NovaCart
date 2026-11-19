@@ -1,0 +1,90 @@
+server:
+  port: 8090
+
+spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  application:
+    name: novacart-mall
+  datasource:
+    url: ${NOVACART_MYSQL_URL:jdbc:mysql://127.0.0.1:3306/novacart?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${NOVACART_MYSQL_USER:root}
+    password: ${NOVACART_MYSQL_PASSWORD:123456}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${NOVACART_REDIS_HOST:127.0.0.1}
+      port: ${NOVACART_REDIS_PORT:6379}
+      timeout: 2s
+  cache:
+    type: redis
+    redis:
+      time-to-live: 10m
+  rabbitmq:
+    host: ${NOVACART_RABBIT_HOST:127.0.0.1}
+    port: ${NOVACART_RABBIT_PORT:5672}
+    username: ${NOVACART_RABBIT_USER:guest}
+    password: ${NOVACART_RABBIT_PASSWORD:guest}
+  cloud:
+    nacos:
+      discovery:
+        enabled: ${NOVACART_NACOS_ENABLED:false}
+        server-addr: ${NOVACART_NACOS_ADDR:127.0.0.1:8848}
+    sentinel:
+      eager: false
+      transport:
+        dashboard: ${NOVACART_SENTINEL_DASHBOARD:127.0.0.1:8858}
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:not-configured}
+      base-url: ${NOVACART_OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
+      chat:
+        options:
+          model: ${NOVACART_CHAT_MODEL:qwen4-max}
+          temperature: 0.2
+      embedding:
+        options:
+          model: ${NOVACART_EMBEDDING_MODEL:tongyi-embedding-vision-flash}
+    vectorstore:
+      pgvector:
+        initialize-schema: false
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+
+novacart:
+  delivery:
+    url: ${NOVACART_DELIVERY_URL:http://127.0.0.1:8091}
+  map:
+    estimate-url: ${NOVACART_MAP_ESTIMATE_URL:}
+  rag:
+    enabled: ${NOVACART_RAG_ENABLED:true}
+  vector:
+    url: ${NOVACART_VECTOR_DB_URL:jdbc:postgresql://127.0.0.1:5432/novacart}
+    username: ${NOVACART_VECTOR_DB_USER:lumenpilot}
+    password: ${NOVACART_VECTOR_DB_PASSWORD:lumenpilot_dev_2026}
+    dimensions: ${NOVACART_VECTOR_DIMENSIONS:768}
+  embedding:
+    base-url: ${NOVACART_EMBEDDING_BASE_URL:https://dashscope.aliyuncs.com/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding}
+    api-key: ${OPENAI_API_KEY:not-configured}
+    model: ${NOVACART_EMBEDDING_MODEL:tongyi-embedding-vision-flash}
+    dimensions: ${NOVACART_VECTOR_DIMENSIONS:768}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+logging:
+  level:
+    com.novacart: INFO
+
+seata:
+  enabled: ${NOVACART_SEATA_ENABLED:false}
+  application-id: novacart-mall
+  tx-service-group: novacart-tx-group

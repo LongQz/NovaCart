@@ -1,0 +1,16 @@
+**/target/
+**/.idea/
+**/*.iml
+**/logs/
+**/.env
+**/.env.*
+!**/.env.example
+**/.env.local
+*.log
+novacart_product_vectors/
+config/application-local.yml
+
+# 旧版页面截图不再随仓库发布，README 只引用 current preview。
+docs/preview.png
+docs/preview-v2.png
+docs/admin-preview.png

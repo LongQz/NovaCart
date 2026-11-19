@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NovaCart 开发者控制台</title>
+    <link rel="stylesheet" href="/admin.css?v=20261119-4">
+</head>
+<body>
+<section id="loginScreen" class="login-screen">
+    <form id="adminLoginForm" class="login-card">
+        <span class="eyebrow">NOVACART DEVELOPER</span>
+        <h1>开发者控制台</h1>
+        <label>账号<input id="adminUsername" autocomplete="username"></label>
+        <label>密码<input id="adminPassword" type="password" autocomplete="current-password"></label>
+        <button>登录控制台</button>
+        <small id="adminLoginError" class="error"></small>
+        <a class="back-link" href="http://127.0.0.1:8090">← 返回用户商城</a>
+    </form>
+</section>
+
+<section id="console" class="console hidden">
+    <aside class="sidebar">
+        <div class="brand"><span>N</span><b>NovaCart<br><small>Developer</small></b></div>
+        <nav>
+            <button class="active" data-tab="dashboard">运营总览</button>
+            <button data-tab="products">商品管理</button>
+            <button data-tab="orders">订单处理</button>
+            <button data-tab="support">客服消息</button>
+        </nav>
+        <a href="http://127.0.0.1:8090" target="_blank">返回用户商城</a>
+        <button id="adminLogout" class="logout">退出登录</button>
+    </aside>
+    <main>
+        <header class="console-header">
+            <div><span class="eyebrow">DEVELOPER MODE</span><h1 id="pageTitle">运营总览</h1></div>
+            <div id="adminName" class="admin-name"></div>
+        </header>
+
+        <section id="dashboardTab" class="tab active">
+            <div id="stats" class="stats"></div>
+            <div class="notice">
+                <h3>订单处理规则</h3>
+                <p>商家发货前可由用户或系统客服取消；商家发货后不可取消。物流状态由开发者按实际处理进度推进。</p>
+            </div>
+        </section>
+
+        <section id="productsTab" class="tab">
+            <div class="toolbar">
+                <input id="productSearch" placeholder="搜索商品">
+                <button id="searchProducts">查询</button>
+            </div>
+            <div id="productRows" class="data-list"></div>
+        </section>
+
+        <section id="ordersTab" class="tab">
+            <div class="toolbar">
+                <button id="reloadOrders">刷新订单</button>
+                <span class="hint">商家发货后，客服不可取消；可在此推进配送状态。</span>
+            </div>
+            <div id="orderRows" class="data-list"></div>
+        </section>
+
+        <section id="supportTab" class="tab">
+            <div class="support-grid">
+                <div>
+                    <h3>用户会话</h3>
+                    <div id="threadRows" class="thread-list"></div>
+                </div>
+                <div>
+                    <h3 id="threadTitle">选择用户会话</h3>
+                    <div id="adminMessages" class="admin-messages"></div>
+                    <form id="replyForm" class="reply-form">
+                        <input id="replyOrderId" type="number" placeholder="关联订单 ID，可选">
+                        <textarea id="replyContent" rows="3" placeholder="回复用户"></textarea>
+                        <button>发送回复</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+    </main>
+</section>
+
+<div id="toast" class="toast"></div>
+<script src="/admin.js?v=20261119-4"></script>
+</body>
+</html>

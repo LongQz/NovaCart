@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NovaCart 商城与闪购</title>
+    <link rel="stylesheet" href="/styles.css?v=20261119-4">
+</head>
+<body>
+<header class="site-header">
+    <div class="header-main">
+        <button class="logo" data-view="home">
+            <span class="logo-box">N</span>
+            <span><b>NovaCart</b><small>商城 · 闪购</small></span>
+        </button>
+        <div class="search-box">
+            <input id="searchInput" type="search" name="catalogSearchQuery"
+                   autocomplete="off" spellcheck="false" placeholder="搜索商品名称、菜品或标签">
+            <button id="searchButton">搜索</button>
+        </div>
+        <nav class="header-actions">
+            <button data-view="home">首页</button>
+            <button data-view="orders">我的订单</button>
+            <button data-view="cart">购物车 <em id="cartBadge">0</em></button>
+            <button data-view="messages">消息</button>
+            <button data-view="profile">个人中心</button>
+            <a class="developer-entry" href="http://127.0.0.1:8092/" target="_blank">开发者入口</a>
+        </nav>
+    </div>
+    <div class="sub-header">
+        <button class="mode-button active" data-type="MALL">品质商城</button>
+        <button class="mode-button" data-type="DELIVERY">闪购外卖</button>
+        <button id="loginEntry" class="login-entry">登录 / 注册</button>
+    </div>
+</header>
+
+<main>
+    <section id="homeView" class="view active">
+        <div class="home-layout">
+            <aside class="quick-panel">
+                <h3>快速入口</h3>
+                <button data-scroll="hotSection">热销榜单</button>
+                <button data-view="orders">订单与配送</button>
+                <button data-view="messages">联系系统客服</button>
+                <div class="service-note">
+                    <b>售后说明</b>
+                    <p>商家发货后不可取消，如有问题可进入消息中心联系客服。</p>
+                </div>
+            </aside>
+
+            <div class="home-content">
+                <section class="banner">
+                    <div>
+                        <span class="banner-label">NOVA CART</span>
+                        <h1 id="bannerTitle">精选好物，直接送到你身边</h1>
+                        <p id="bannerText">数码、生活、出行商品统一选购，支持订单轨迹与售后客服。</p>
+                    </div>
+                    <div class="banner-stat">
+                        <span>今日推荐</span>
+                        <strong id="bannerCount">--</strong>
+                        <small>件热销商品</small>
+                    </div>
+                </section>
+
+                <section id="hotSection" class="panel-section">
+                    <div class="section-head">
+                        <div><span class="section-kicker">热销排行</span><h2 id="hotTitle">热门商品</h2></div>
+                        <button class="text-button" data-view="orders">查看我的订单</button>
+                    </div>
+                    <div id="hotList" class="hot-list"></div>
+                </section>
+
+                <section class="panel-section">
+                    <div class="section-head">
+                        <div><span class="section-kicker" id="gridKicker">精选专区</span><h2 id="gridTitle">全部商品</h2></div>
+                        <span id="resultCount" class="muted"></span>
+                    </div>
+                    <div id="productGrid" class="product-grid"></div>
+                </section>
+            </div>
+        </div>
+    </section>
+
+    <section id="cartView" class="view page-view">
+        <div class="page-title"><div><span class="section-kicker">MY CART</span><h1>购物车</h1></div><button class="plain-button" data-view="home">继续购物</button></div>
+        <div class="cart-layout">
+            <div id="cartList" class="cart-list"></div>
+            <aside class="settlement">
+                <h3>结算信息</h3>
+                <label>收货人<input id="cartRecipient" placeholder="请输入姓名"></label>
+                <label>联系电话<input id="cartPhone" placeholder="请输入手机号"></label>
+                <label>配送地址<textarea id="cartAddress" rows="3" placeholder="请输入详细地址"></textarea></label>
+                <div class="sum-row"><span>商品件数</span><strong id="cartQuantity">0</strong></div>
+                <div class="sum-row total"><span>合计</span><strong id="cartTotal">¥0.00</strong></div>
+                <button id="cartCheckout" class="primary-button">确认订单</button>
+            </aside>
+        </div>
+    </section>
+
+    <section id="checkoutView" class="view page-view">
+        <div class="page-title"><div><span class="section-kicker">ORDER CONFIRM</span><h1>确认订单</h1></div></div>
+        <div class="checkout-layout">
+            <div class="checkout-main">
+                <div class="address-card">
+                    <div class="checkout-contact">
+                        <label>收货人<input id="checkoutRecipient" placeholder="请输入姓名"></label>
+                        <label>联系电话<input id="checkoutPhone" placeholder="请输入手机号"></label>
+                    </div>
+                    <label>配送地址<textarea id="checkoutAddress" rows="2" placeholder="商城订单可不填，外卖订单必填"></textarea></label>
+                </div>
+                <div id="checkoutItems" class="checkout-items"></div>
+            </div>
+            <aside class="settlement">
+                <h3>订单金额</h3>
+                <div class="sum-row"><span>商品金额</span><strong id="checkoutTotal">¥0.00</strong></div>
+                <div class="sum-row"><span>配送费</span><strong>¥0.00</strong></div>
+                <div class="sum-row total"><span>应付</span><strong id="checkoutPayable">¥0.00</strong></div>
+                <button id="createOrderButton" class="primary-button">提交并去支付</button>
+            </aside>
+        </div>
+    </section>
+
+    <section id="payView" class="view page-view">
+        <div class="pay-card">
+            <span class="section-kicker">SAFE PAYMENT</span>
+            <h1>收银台</h1>
+            <p id="payOrderNo" class="muted"></p>
+            <div class="pay-amount" id="payAmount">¥0.00</div>
+            <div class="pay-methods">
+                <label><input type="radio" name="payMethod" value="ALIPAY" checked> 支付宝（模拟）</label>
+                <label><input type="radio" name="payMethod" value="WECHAT"> 微信支付（模拟）</label>
+            </div>
+            <button id="confirmPayButton" class="primary-button">确认支付</button>
+            <button class="plain-button" data-view="orders">暂不支付，查看订单</button>
+        </div>
+    </section>
+
+    <section id="successView" class="view page-view">
+        <div class="success-card">
+            <div class="success-icon">✓</div>
+            <h1>支付成功</h1>
+            <p id="successMessage"></p>
+            <button class="primary-button" data-view="orders">查看订单与配送</button>
+        </div>
+    </section>
+
+    <section id="ordersView" class="view page-view">
+        <div class="page-title"><div><span class="section-kicker">MY ORDERS</span><h1>我的订单</h1></div><button class="plain-button" data-view="home">返回首页</button></div>
+        <div id="orderList" class="order-list"></div>
+    </section>
+
+    <section id="profileView" class="view page-view">
+        <div class="page-title"><div><span class="section-kicker">ACCOUNT</span><h1>个人中心</h1></div></div>
+        <div id="profileContent" class="profile-card"></div>
+    </section>
+
+    <section id="messagesView" class="view page-view">
+        <div class="page-title">
+            <div><span class="section-kicker">CUSTOMER SERVICE</span><h1>消息中心</h1></div>
+            <button class="plain-button" data-view="home">返回首页</button>
+        </div>
+        <div class="support-layout">
+            <div id="supportMessages" class="support-messages"></div>
+            <form id="supportForm" class="support-form">
+                <textarea id="supportInput" rows="4" placeholder="描述订单问题或售后需求"></textarea>
+                <button class="primary-button">发送给系统客服</button>
+            </form>
+        </div>
+    </section>
+</main>
+
+<aside id="assistantPanel" class="assistant-panel">
+    <div class="assistant-head"><div><b>智能选购</b><small>按口味与预算推荐</small></div><button id="closeAssistant">×</button></div>
+    <div id="assistantMessages" class="assistant-messages"></div>
+    <form id="assistantForm" class="assistant-form">
+        <textarea id="assistantInput" rows="3" placeholder="例如：80元内两人晚餐，不辣，需要配送"></textarea>
+        <button class="primary-button">发送</button>
+    </form>
+</aside>
+
+<button id="assistantLauncher" class="assistant-launcher" type="button" aria-label="打开智能选购助手">
+    <span id="assistantSpeech" class="assistant-speech" aria-live="polite">
+        <b>需要帮忙吗？</b>
+        <small>点我帮你挑</small>
+    </span>
+    <span class="assistant-creature" aria-hidden="true">
+        <span class="assistant-antenna"></span>
+        <span class="assistant-eye assistant-eye-left"></span>
+        <span class="assistant-eye assistant-eye-right"></span>
+        <span class="assistant-smile"></span>
+    </span>
+</button>
+
+<div id="loginModal" class="modal">
+    <div class="modal-card">
+        <button class="modal-close" data-close="loginModal">×</button>
+        <span class="section-kicker">ACCOUNT LOGIN</span>
+        <h2 id="authTitle">登录 NovaCart</h2>
+        <div class="auth-tabs">
+            <button id="loginTab" class="active">登录</button>
+            <button id="registerTab">注册</button>
+        </div>
+        <div id="loginForm" class="auth-form">
+            <label>用户名<input id="loginUsername" autocomplete="username"></label>
+            <label>密码<input id="loginPassword" type="password" autocomplete="current-password"></label>
+            <button id="loginButton" class="primary-button">登录</button>
+        </div>
+        <div id="registerForm" class="auth-form hidden">
+            <label>用户名<input id="registerUsername" autocomplete="username" placeholder="4-24位字母、数字或下划线"></label>
+            <label>昵称<input id="registerNickname" placeholder="注册后展示的昵称"></label>
+            <label>手机号<input id="registerPhone" inputmode="numeric" maxlength="11" placeholder="11位手机号"></label>
+            <label>验证码
+                <span class="code-row">
+                    <input id="registerCode" inputmode="numeric" maxlength="6" placeholder="6位验证码">
+                    <button id="sendRegisterCode" type="button">获取验证码</button>
+                </span>
+            </label>
+            <small id="registerCodeHint" class="muted"></small>
+            <label>密码<input id="registerPassword" type="password" autocomplete="new-password" placeholder="至少6位"></label>
+            <button id="registerButton" class="primary-button">注册并登录</button>
+        </div>
+        <p id="loginError" class="error-text"></p>
+    </div>
+</div>
+
+<div id="productDetailModal" class="modal">
+    <div class="modal-card product-detail-card">
+        <button class="modal-close" data-close="productDetailModal">×</button>
+        <div id="productDetailContent"></div>
+    </div>
+</div>
+
+<div id="confirmModal" class="modal">
+    <div class="modal-card">
+        <h2>请确认订单信息</h2>
+        <div id="confirmContent" class="confirm-content"></div>
+        <div class="modal-actions">
+            <button class="plain-button" data-close="confirmModal">返回修改</button>
+            <button id="confirmOrderButton" class="primary-button">信息无误，继续支付</button>
+        </div>
+    </div>
+</div>
+
+<div id="reviewModal" class="modal">
+    <div class="modal-card">
+        <button class="modal-close" data-close="reviewModal">×</button>
+        <h2>评价订单</h2>
+        <label>评分
+            <select id="reviewRating">
+                <option value="5">5 分 · 非常满意</option>
+                <option value="4">4 分 · 满意</option>
+                <option value="3">3 分 · 一般</option>
+                <option value="2">2 分 · 不满意</option>
+                <option value="1">1 分 · 很差</option>
+            </select>
+        </label>
+        <label>评价内容<textarea id="reviewContent" rows="4" placeholder="说说商品、配送或服务体验"></textarea></label>
+        <button id="submitReviewButton" class="primary-button">提交评价</button>
+    </div>
+</div>
+
+<div id="toast" class="toast"></div>
+    <script src="/app.js?v=20261119-5"></script>
+</body>
+</html>
