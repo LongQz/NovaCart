@@ -186,4 +186,4 @@ NovaCart 品牌、Java 包名、页面、数据库与新增业务实现；新增
 
 ## Author
 
-LongQz · 重庆邮电大学计算机科学与技术
+LongQz
