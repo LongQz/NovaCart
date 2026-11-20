@@ -69,6 +69,7 @@ def main():
     parser.add_argument("--requests", type=int, default=80)
     parser.add_argument("--product-id", type=int, default=0)
     parser.add_argument("--timeout-wait", type=int, default=15)
+    parser.add_argument("--skip-timeout", action="store_true")
     parser.add_argument("--output", default="docs/concurrency-test-result.json")
     args = parser.parse_args()
 
@@ -172,24 +173,27 @@ def main():
         if status < 400 and payload.get("success")
     }
 
-    # Give the timeout test a dedicated unit after the stock-contention round.
-    set_stock(args.admin, admin["token"], product_id, 1)
-    timeout_order = require_success(
-        args.mall,
-        "POST",
-        "/api/orders",
-        user["token"],
-        make_order(args.mall, user["token"], product_id, "timeout-" + uuid.uuid4().hex, "延迟关单测试"),
-    )
-    timeout_order_id = timeout_order["order"]["id"]
-    deadline = time.time() + args.timeout_wait
-    timeout_status = "PENDING_PAYMENT"
-    while time.time() < deadline:
-        order = require_success(args.mall, "GET", f"/api/orders/{timeout_order_id}", user["token"])
-        timeout_status = order["order"]["status"]
-        if timeout_status == "CANCELLED":
-            break
-        time.sleep(1)
+    timeout_order_id = None
+    timeout_status = "SKIPPED"
+    if not args.skip_timeout:
+        # Give the timeout test a dedicated unit after the stock-contention round.
+        set_stock(args.admin, admin["token"], product_id, 1)
+        timeout_order = require_success(
+            args.mall,
+            "POST",
+            "/api/orders",
+            user["token"],
+            make_order(args.mall, user["token"], product_id, "timeout-" + uuid.uuid4().hex, "延迟关单测试"),
+        )
+        timeout_order_id = timeout_order["order"]["id"]
+        deadline = time.time() + args.timeout_wait
+        timeout_status = "PENDING_PAYMENT"
+        while time.time() < deadline:
+            order = require_success(args.mall, "GET", f"/api/orders/{timeout_order_id}", user["token"])
+            timeout_status = order["order"]["status"]
+            if timeout_status == "CANCELLED":
+                break
+            time.sleep(1)
 
     for order_id in successful_orders:
         call(
