@@ -3,6 +3,7 @@ package com.novacart.admin.service;
 import com.novacart.api.DeliveryClient;
 import com.novacart.common.DeliveryStatus;
 import org.apache.seata.spring.annotation.GlobalTransactional;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,10 +23,16 @@ import java.util.Map;
 public class AdminService {
     private final JdbcTemplate jdbcTemplate;
     private final DeliveryClient deliveryClient;
+    private final StringRedisTemplate redisTemplate;
 
-    public AdminService(JdbcTemplate jdbcTemplate, DeliveryClient deliveryClient) {
+    public AdminService(
+            JdbcTemplate jdbcTemplate,
+            DeliveryClient deliveryClient,
+            StringRedisTemplate redisTemplate
+    ) {
         this.jdbcTemplate = jdbcTemplate;
         this.deliveryClient = deliveryClient;
+        this.redisTemplate = redisTemplate;
     }
 
     public Map<String, Object> dashboard() {
@@ -71,6 +78,9 @@ public class AdminService {
                 active == null ? null : Boolean.parseBoolean(active.toString()),
                 description,
                 id);
+        if (stock != null) {
+            redisTemplate.opsForValue().set("stock:product:" + id, stock.toString());
+        }
     }
 
     public List<Map<String, Object>> orders() {
@@ -107,10 +117,16 @@ public class AdminService {
                 orderId);
         List<Map<String, Object>> items = jdbcTemplate.queryForList(
                 "select product_id, quantity from order_item where order_id=?", orderId);
-        items.forEach(item -> jdbcTemplate.update(
-                "update product set stock=stock+? where id=?",
-                item.get("quantity"),
-                item.get("product_id")));
+        items.forEach(item -> {
+            jdbcTemplate.update(
+                    "update product set stock=stock+? where id=?",
+                    item.get("quantity"),
+                    item.get("product_id"));
+            String key = "stock:product:" + item.get("product_id");
+            if (Boolean.TRUE.equals(redisTemplate.hasKey(key))) {
+                redisTemplate.opsForValue().increment(key, Long.parseLong(item.get("quantity").toString()));
+            }
+        });
     }
 
     public void advanceDelivery(Long orderId) {

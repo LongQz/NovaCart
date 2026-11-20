@@ -8,23 +8,29 @@ import com.novacart.common.DeliveryTaskRequest;
 import com.novacart.common.OrderCreateRequest;
 import com.novacart.common.OrderStatus;
 import com.novacart.mall.dto.OrderView;
+import com.novacart.mall.dto.PaymentCallbackRequest;
 import com.novacart.mall.entity.OrderItem;
 import com.novacart.mall.entity.Orders;
+import com.novacart.mall.entity.PaymentCallbackLog;
 import com.novacart.mall.entity.Product;
 import com.novacart.mall.mapper.OrderItemMapper;
 import com.novacart.mall.mapper.OrderMapper;
+import com.novacart.mall.mapper.PaymentCallbackMapper;
 import com.novacart.mall.mapper.ProductMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.seata.spring.annotation.GlobalTransactional;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /** Transactional checkout workflow for both mall and instant delivery. */
@@ -38,6 +44,8 @@ public class OrderService {
     private final CartService cartService;
     private final DeliveryClient deliveryClient;
     private final OrderEventPublisher eventPublisher;
+    private final RedisStockService redisStockService;
+    private final PaymentCallbackMapper paymentCallbackMapper;
 
     public OrderService(
             OrderMapper orderMapper,
@@ -46,7 +54,9 @@ public class OrderService {
             ProductService productService,
             CartService cartService,
             DeliveryClient deliveryClient,
-            OrderEventPublisher eventPublisher
+            OrderEventPublisher eventPublisher,
+            RedisStockService redisStockService,
+            PaymentCallbackMapper paymentCallbackMapper
     ) {
         this.orderMapper = orderMapper;
         this.orderItemMapper = orderItemMapper;
@@ -55,11 +65,13 @@ public class OrderService {
         this.cartService = cartService;
         this.deliveryClient = deliveryClient;
         this.eventPublisher = eventPublisher;
+        this.redisStockService = redisStockService;
+        this.paymentCallbackMapper = paymentCallbackMapper;
     }
 
     @Transactional
     public OrderView create(OrderCreateRequest request) {
-        // 幂等键用于阻止重复点击；库存扣减使用带 stock >= quantity 条件的原子 SQL。
+        // Idempotency is checked in the database before Redis reservation.
         validate(request);
         String requestKey = request.idempotencyKey() == null || request.idempotencyKey().isBlank()
                 ? UUID.randomUUID().toString()
@@ -69,19 +81,58 @@ public class OrderService {
             return view(existing);
         }
 
+        Map<Long, Product> products = new LinkedHashMap<>();
+        Map<Long, Integer> quantities = new LinkedHashMap<>();
         BigDecimal total = BigDecimal.ZERO;
         for (CartItem item : request.items()) {
             Product product = productService.requireProduct(item.productId());
             if (!request.bizType().name().equals(product.getBizType())) {
                 throw new BizException("商城商品和闪购商品需要分别下单");
             }
-            if (productMapper.deductStock(product.getId(), item.quantity()) != 1) {
-                throw new BizException(product.getName() + " 库存不足");
-            }
-            productMapper.increaseSales(product.getId(), item.quantity());
+            products.put(product.getId(), product);
+            quantities.merge(product.getId(), item.quantity(), Integer::sum);
             total = total.add(product.getPrice().multiply(BigDecimal.valueOf(item.quantity())));
         }
 
+        products.values().forEach(redisStockService::load);
+        redisStockService.reserve(quantities);
+
+        try {
+            quantities.forEach((productId, quantity) -> deductWithOptimisticRetry(products.get(productId), quantity));
+
+            for (CartItem item : request.items()) {
+                productMapper.increaseSales(item.productId(), item.quantity());
+            }
+
+            Orders order = buildOrder(request, requestKey, total);
+            try {
+                orderMapper.insert(order);
+            } catch (DuplicateKeyException exception) {
+                throw new DuplicateOrderRequestException(requestKey);
+            }
+
+            for (CartItem item : request.items()) {
+                Product product = products.get(item.productId());
+                OrderItem line = new OrderItem();
+                line.setOrderId(order.getId());
+                line.setProductId(product.getId());
+                line.setProductName(product.getName());
+                line.setPrice(product.getPrice());
+                line.setQuantity(item.quantity());
+                orderItemMapper.insert(line);
+            }
+            cartService.clear(request.userId());
+            eventPublisher.orderTimeout(order);
+            return view(order);
+        } catch (RuntimeException exception) {
+            // Database changes roll back with the transaction; Redis must be
+            // compensated explicitly when any downstream step fails.
+            redisStockService.restore(quantities);
+            throw exception;
+        }
+    }
+
+    private Orders buildOrder(OrderCreateRequest request, String requestKey, BigDecimal total) {
         Orders order = new Orders();
         order.setOrderNo("NC" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
                 + UUID.randomUUID().toString().substring(0, 4).toUpperCase());
@@ -95,36 +146,70 @@ public class OrderService {
         order.setAddress(request.address());
         order.setNote(request.note());
         order.setCreatedAt(LocalDateTime.now());
-        orderMapper.insert(order);
+        order.setVersion(0);
+        return order;
+    }
 
-        for (CartItem item : request.items()) {
-            Product product = productService.requireProduct(item.productId());
-            OrderItem line = new OrderItem();
-            line.setOrderId(order.getId());
-            line.setProductId(product.getId());
-            line.setProductName(product.getName());
-            line.setPrice(product.getPrice());
-            line.setQuantity(item.quantity());
-            orderItemMapper.insert(line);
+    private void deductWithOptimisticRetry(Product product, int quantity) {
+        Product latest = product;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            int version = latest.getVersion() == null ? 0 : latest.getVersion();
+            if (productMapper.deductStockWithVersion(product.getId(), quantity, version) == 1) {
+                return;
+            }
+            latest = productService.requireProduct(product.getId());
+            if (latest.getStock() < quantity) {
+                break;
+            }
         }
-        cartService.clear(request.userId());
-        return view(order);
+        // Under heavy contention, the conditional stock update is the final
+        // database guard. The version checks above avoid lost updates when
+        // contention is low, while this branch prevents unnecessary failures.
+        if (productMapper.deductStock(product.getId(), quantity) == 1) {
+            return;
+        }
+        throw new BizException(product.getName() + " 库存不足或并发更新冲突");
     }
 
     @GlobalTransactional(name = "novacart-pay-order", rollbackFor = Exception.class)
     @Transactional
     public OrderView pay(Long orderId) {
-        // 支付成功后：商城订单进入待发货；外卖订单进入待商家接单。
-        Orders order = orderMapper.selectById(orderId);
+        return handlePaymentCallback(new PaymentCallbackRequest(
+                "manual-" + orderId + "-" + UUID.randomUUID(),
+                orderId,
+                true
+        ));
+    }
+
+    @GlobalTransactional(name = "novacart-payment-callback", rollbackFor = Exception.class)
+    @Transactional
+    public OrderView handlePaymentCallback(PaymentCallbackRequest callback) {
+        PaymentCallbackLog callbackLog = new PaymentCallbackLog();
+        callbackLog.setCallbackId(callback.callbackId());
+        callbackLog.setOrderId(callback.orderId());
+        callbackLog.setPayload(callback.callbackId() + ":" + callback.success());
+        try {
+            paymentCallbackMapper.insert(callbackLog);
+        } catch (DuplicateKeyException exception) {
+            throw new DuplicatePaymentCallbackException(callback.callbackId());
+        }
+
+        Orders order = orderMapper.selectById(callback.orderId());
         if (order == null) {
             throw new BizException("订单不存在");
         }
-        if (OrderStatus.PENDING_PAYMENT.name().equals(order.getStatus())) {
+        if (callback.success() && OrderStatus.PENDING_PAYMENT.name().equals(order.getStatus())) {
             order.setStatus(BizType.DELIVERY.name().equals(order.getBizType())
                     ? OrderStatus.PENDING_MERCHANT.name()
                     : OrderStatus.PAID.name());
             order.setPaidAt(LocalDateTime.now());
-            orderMapper.updateById(order);
+            if (orderMapper.updateById(order) != 1) {
+                Orders latest = orderMapper.selectById(callback.orderId());
+                if (latest == null || OrderStatus.PENDING_PAYMENT.name().equals(latest.getStatus())) {
+                    throw new BizException("支付状态并发更新失败");
+                }
+                return view(latest);
+            }
             if (BizType.DELIVERY.name().equals(order.getBizType())) {
                 try {
                     deliveryClient.createTask(new DeliveryTaskRequest(
@@ -134,6 +219,26 @@ public class OrderService {
                 }
             }
             eventPublisher.orderPaid(order);
+        }
+        return view(order);
+    }
+
+    public OrderView findByIdempotencyKey(String requestKey) {
+        Orders order = orderMapper.findByRequestKey(requestKey);
+        if (order == null) {
+            throw new BizException("幂等订单不存在");
+        }
+        return view(order);
+    }
+
+    public OrderView findByCallbackId(String callbackId) {
+        PaymentCallbackLog callback = paymentCallbackMapper.findByCallbackId(callbackId);
+        if (callback == null) {
+            throw new BizException("支付回调不存在");
+        }
+        Orders order = orderMapper.selectById(callback.getOrderId());
+        if (order == null) {
+            throw new BizException("回调关联订单不存在");
         }
         return view(order);
     }
@@ -170,11 +275,25 @@ public class OrderService {
         }
         order.setStatus(OrderStatus.CANCELLED.name());
         order.setCancelReason(reason == null || reason.isBlank() ? "用户取消" : reason);
-        orderMapper.updateById(order);
-        orderItemMapper.selectList(new LambdaQueryWrapper<OrderItem>()
-                        .eq(OrderItem::getOrderId, orderId))
-                .forEach(item -> productMapper.restoreStock(item.getProductId(), item.getQuantity()));
+        if (orderMapper.updateById(order) != 1) {
+            throw new BizException("订单状态已变化，请刷新后重试");
+        }
+        restoreOrderInventory(orderId);
         return view(order);
+    }
+
+    @Transactional
+    public void cancelTimedOutOrder(Long orderId) {
+        Orders order = orderMapper.selectById(orderId);
+        if (order == null || !OrderStatus.PENDING_PAYMENT.name().equals(order.getStatus())) {
+            return;
+        }
+        order.setStatus(OrderStatus.CANCELLED.name());
+        order.setCancelReason("超时未支付");
+        if (orderMapper.updateById(order) != 1) {
+            return;
+        }
+        restoreOrderInventory(orderId);
     }
 
     public OrderView get(Long orderId) {
@@ -208,13 +327,9 @@ public class OrderService {
     @Scheduled(fixedDelay = 60_000)
     @Transactional
     public void cancelExpiredOrders() {
-        // Spring Task 每分钟扫描超时未支付订单，恢复库存并关闭订单。
+        // Database scan remains a safety net if RabbitMQ is unavailable.
         for (Orders order : orderMapper.findExpiredOrders()) {
-            order.setStatus(OrderStatus.CANCELLED.name());
-            orderMapper.updateById(order);
-            List<OrderItem> items = orderItemMapper.selectList(
-                    new LambdaQueryWrapper<OrderItem>().eq(OrderItem::getOrderId, order.getId()));
-            items.forEach(item -> productMapper.restoreStock(item.getProductId(), item.getQuantity()));
+            cancelTimedOutOrder(order.getId());
         }
     }
 
@@ -240,5 +355,14 @@ public class OrderService {
         List<OrderItem> items = orderItemMapper.selectList(
                 new LambdaQueryWrapper<OrderItem>().eq(OrderItem::getOrderId, order.getId()));
         return new OrderView(order, items, null);
+    }
+
+    private void restoreOrderInventory(Long orderId) {
+        Map<Long, Integer> quantities = new LinkedHashMap<>();
+        orderItemMapper.selectList(
+                        new LambdaQueryWrapper<OrderItem>().eq(OrderItem::getOrderId, orderId))
+                .forEach(item -> quantities.merge(item.getProductId(), item.getQuantity(), Integer::sum));
+        quantities.forEach((productId, quantity) -> productMapper.restoreStock(productId, quantity));
+        redisStockService.restore(quantities);
     }
 }

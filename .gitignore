@@ -7,6 +7,8 @@
 !**/.env.example
 **/.env.local
 *.log
+**/__pycache__/
+**/*.pyc
 novacart_product_vectors/
 config/application-local.yml
 

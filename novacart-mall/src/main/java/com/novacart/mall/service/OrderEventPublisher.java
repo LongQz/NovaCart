@@ -1,6 +1,7 @@
 package com.novacart.mall.service;
 
 import com.novacart.common.OrderPaidEvent;
+import com.novacart.common.OrderTimeoutEvent;
 import com.novacart.mall.entity.Orders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +31,18 @@ public class OrderEventPublisher {
             );
         } catch (Exception exception) {
             LOGGER.warn("RabbitMQ order event skipped: {}", exception.getMessage());
+        }
+    }
+
+    public void orderTimeout(Orders order) {
+        try {
+            rabbitTemplate.convertAndSend(
+                    "novacart.order.timeout.delay",
+                    "order.timeout.wait",
+                    new OrderTimeoutEvent(order.getId(), order.getUserId())
+            );
+        } catch (Exception exception) {
+            LOGGER.warn("RabbitMQ timeout event skipped: {}", exception.getMessage());
         }
     }
 }

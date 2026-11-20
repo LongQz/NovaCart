@@ -3,7 +3,10 @@ package com.novacart.mall.controller;
 import com.novacart.common.ApiResponse;
 import com.novacart.common.OrderCreateRequest;
 import com.novacart.mall.dto.OrderView;
+import com.novacart.mall.dto.PaymentCallbackRequest;
 import com.novacart.mall.entity.Orders;
+import com.novacart.mall.service.DuplicateOrderRequestException;
+import com.novacart.mall.service.DuplicatePaymentCallbackException;
 import com.novacart.mall.service.OrderService;
 import com.novacart.mall.dto.AuthUser;
 import com.novacart.mall.service.AuthService;
@@ -36,22 +39,35 @@ public class OrderController {
     ) {
         // 服务端覆盖请求体中的 userId，防止替其他用户下单。
         AuthUser user = authService.requireUser(authorization);
-        return ApiResponse.ok(orderService.create(new OrderCreateRequest(
-                user.id(),
-                request.bizType(),
-                request.recipient(),
-                request.phone(),
-                request.address(),
-                request.note(),
-                request.idempotencyKey(),
-                request.items()
-        )));
+        try {
+            return ApiResponse.ok(orderService.create(new OrderCreateRequest(
+                    user.id(),
+                    request.bizType(),
+                    request.recipient(),
+                    request.phone(),
+                    request.address(),
+                    request.note(),
+                    request.idempotencyKey(),
+                    request.items()
+            )));
+        } catch (DuplicateOrderRequestException exception) {
+            return ApiResponse.ok(orderService.findByIdempotencyKey(exception.getRequestKey()));
+        }
     }
 
     @PostMapping("/{id}/pay")
     public ApiResponse<OrderView> pay(@PathVariable Long id) {
         // 本地模拟支付；外卖支付后会通过 Feign 和 RabbitMQ 触发配送。
         return ApiResponse.ok(orderService.pay(id));
+    }
+
+    @PostMapping("/payment-callback")
+    public ApiResponse<OrderView> paymentCallback(@RequestBody PaymentCallbackRequest request) {
+        try {
+            return ApiResponse.ok(orderService.handlePaymentCallback(request));
+        } catch (DuplicatePaymentCallbackException exception) {
+            return ApiResponse.ok(orderService.findByCallbackId(exception.getCallbackId()));
+        }
     }
 
     @GetMapping("/{id}")

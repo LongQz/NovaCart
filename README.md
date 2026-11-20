@@ -115,6 +115,18 @@ NOVACART_SEATA_ENABLED=true
 商城支付后发布 `order.paid` 事件，外卖服务消费事件并幂等创建配送任务；OpenFeign
 仍保留为同步调用和业务校验通道。
 
+未支付订单还会投递到 RabbitMQ TTL + 死信延迟队列。消息到期后重新进入
+`novacart.order.timeout` 队列，由商城服务关闭订单并回补数据库和 Redis 库存。
+Spring Task 扫描保留为消息基础设施不可用时的兜底。
+
+### 库存与幂等
+
+- 下单前通过 Redis Lua 对多商品库存做原子预扣。
+- MySQL 使用版本乐观锁与 `stock >= quantity` 条件更新双重校验库存。
+- `orders.request_key` 唯一约束保证重复下单只生成一个订单。
+- `payment_callback_log.callback_id` 唯一约束保证支付回调幂等。
+- 订单、支付、取消和库存回补均测试并发冲突与重复请求。
+
 ### Nacos
 
 默认使用本地固定地址，启动 Nacos 后启用 `cloud` profile：
@@ -160,6 +172,7 @@ docker exec -e PGPASSWORD="<your-local-postgres-password>" lumenpilot-pg `
 mvn test
 python scripts\smoke_test.py
 python scripts\extended_test.py
+python scripts\high_concurrency_test.py --stock 40 --requests 80 --timeout-wait 20
 ```
 
 覆盖：
@@ -177,6 +190,8 @@ python scripts\extended_test.py
 → 客服回复
 → Spring AI 推荐
 ```
+
+并发验证结果见 [docs/concurrency-test-report.md](docs/concurrency-test-report.md)。
 
 ## 来源声明
 

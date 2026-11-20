@@ -3,6 +3,7 @@ package com.novacart.mall.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.Version;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -27,4 +28,6 @@ public class Orders {
     private String cancelReason;
     private LocalDateTime createdAt;
     private LocalDateTime paidAt;
+    @Version
+    private Integer version;
 }

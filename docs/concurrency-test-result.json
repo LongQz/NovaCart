@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-11-20T15:39:46",
+  "productId": 24,
+  "initialStock": 40,
+  "requests": 80,
+  "successfulOrders": 40,
+  "stockoutOrConflictResponses": 40,
+  "unexpectedFailures": 0,
+  "throughputPerSecond": 290.71,
+  "latencyMs": {
+    "mean": 172.56,
+    "p95": 232.8,
+    "max": 256.11
+  },
+  "duplicateRequest": {
+    "requests": 16,
+    "distinctOrderIds": 1,
+    "orderId": 157
+  },
+  "paymentCallback": {
+    "requests": 16,
+    "successResponses": 16,
+    "statuses": [
+      "PENDING_MERCHANT"
+    ]
+  },
+  "rabbitTimeout": {
+    "orderId": 167,
+    "statusAfterWait": "CANCELLED"
+  }
+}

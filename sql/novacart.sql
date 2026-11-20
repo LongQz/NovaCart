@@ -73,6 +73,7 @@ CREATE TABLE product (
     biz_type VARCHAR(16) NOT NULL,
     price DECIMAL(10,2) NOT NULL,
     stock INT NOT NULL,
+    version INT NOT NULL DEFAULT 0,
     sales INT NOT NULL DEFAULT 0,
     description VARCHAR(500),
     tags VARCHAR(255),
@@ -127,7 +128,17 @@ CREATE TABLE orders (
     cancel_reason VARCHAR(255),
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     paid_at DATETIME,
+    version INT NOT NULL DEFAULT 0,
     INDEX idx_orders_user (user_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE payment_callback_log (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    callback_id VARCHAR(96) NOT NULL UNIQUE,
+    order_id BIGINT NOT NULL,
+    payload VARCHAR(1000),
+    processed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_payment_callback_order (order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE order_item (
